@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+app/generated/analysis_pb2*.py
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage

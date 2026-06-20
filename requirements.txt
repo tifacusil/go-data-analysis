@@ -1,0 +1,24 @@
+# Transport
+grpcio==1.73.0
+grpcio-tools==1.73.0
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+
+# Data / ML
+numpy==2.2.6
+scipy==1.15.3
+scikit-learn==1.7.0
+pandas==2.3.0
+statsmodels==0.14.4
+PyWavelets==1.8.0
+EMD-signal==1.6.4
+
+# Infrastructure
+redis==6.1.0
+requests==2.32.4
+
+# Validation
+pydantic==2.11.7
+
+# CDCT
+pact-python==2.4.3

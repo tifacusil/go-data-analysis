@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package analysis;
+
+service AnalysisService {
+  rpc DetectOutliers(OutliersRequest)   returns (OutliersResponse);
+  rpc Denoise       (DenoiseRequest)    returns (DenoiseResponse);
+  rpc Regression    (RegressionRequest) returns (RegressionResponse);
+  rpc Predict       (PredictRequest)    returns (PredictResponse);
+}
+
+// ── Outliers ──────────────────────────────────────────────────────────────────
+
+message OutliersRequest {
+  repeated double values     = 1;
+  repeated string timestamps = 2;
+  string          method     = 3; // "3sigma" | "chauvenet" | "iqr"
+}
+
+message OutlierEntry {
+  int32  index           = 1;
+  string timestamp       = 2;
+  double value           = 3;
+  string criterion       = 4;
+  double threshold_upper = 5;
+  double threshold_lower = 6;
+  double z_score         = 7;
+  double probability     = 8;
+}
+
+message OutliersStatistics {
+  double mean          = 1;
+  double std           = 2;
+  int32  n             = 3;
+  int32  outlier_count = 4;
+}
+
+message OutliersResponse {
+  string            method     = 1;
+  repeated OutlierEntry outliers   = 2;
+  OutliersStatistics    statistics = 3;
+}
+
+// ── Denoise ───────────────────────────────────────────────────────────────────
+
+message DenoiseRequest {
+  repeated double values     = 1;
+  repeated string timestamps = 2;
+  string          method     = 3; // "wavelet" | "emd" | "svm"
+}
+
+message DenoiseResponse {
+  repeated double denoised_values = 1;
+  string          method          = 2;
+  string          params_json     = 3; // JSON-encoded algorithm params
+}
+
+// ── Regression ────────────────────────────────────────────────────────────────
+
+message RegressionRequest {
+  repeated double values     = 1;
+  repeated string timestamps = 2;
+  string          model      = 3; // "polynomial" | "bayesian"
+  int32           degree     = 4; // used only for polynomial; ignored otherwise
+}
+
+message RegressionResponse {
+  repeated double coefficients  = 1;
+  repeated double fitted_values = 2;
+  double          r2_score      = 3;
+  string          model         = 4;
+  int32           degree        = 5; // 0 when not applicable
+}
+
+// ── Predict ───────────────────────────────────────────────────────────────────
+
+message PredictRequest {
+  repeated double values      = 1;
+  repeated string timestamps  = 2;
+  string          model       = 3; // "arima" | "gm11"
+  int32           horizon     = 4;
+  repeated int32  arima_order = 5; // [p, d, q]; empty → auto (1,1,1)
+}
+
+message PredictResponse {
+  repeated double predicted_values     = 1;
+  repeated string predicted_timestamps = 2;
+  repeated double confidence_lower     = 3; // empty for gm11
+  repeated double confidence_upper     = 4; // empty for gm11
+  string          model                = 5;
+  int32           horizon              = 6;
+  repeated int32  order                = 7;
+}
