@@ -20,8 +20,16 @@ def detect_outliers(values: List[float], timestamps: List[str], method: str) -> 
     outliers: list[dict[str, Any]] = []
 
     if method == "3sigma":
-        upper = mean + 3.0 * std if std != 0.0 else mean
-        lower = mean - 3.0 * std if std != 0.0 else mean
+        # Robust 3-sigma: median + MAD modified z-score (threshold 3.5).
+        # Avoids masking, where a single large spike inflates mean/std and hides itself.
+        median = float(np.median(x))
+        mad = float(np.median(np.abs(x - median)))
+        if mad != 0.0:
+            scale = mad / 0.6745  # consistent estimator of std for normal data
+        else:
+            scale = std  # degenerate MAD; fall back to standard deviation
+        upper = median + 3.5 * scale if scale != 0.0 else median
+        lower = median - 3.5 * scale if scale != 0.0 else median
         for i, v in enumerate(x.tolist()):
             if v > upper:
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(v),
