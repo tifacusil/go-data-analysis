@@ -25,12 +25,12 @@ def detect_outliers(values: List[float], timestamps: List[str], method: str) -> 
         for i, v in enumerate(x.tolist()):
             if v > upper:
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(v),
-                                  "threshold_upper": upper, "threshold_lower": lower,
-                                  "criterion": "exceeds_upper"})
+                                 "threshold_upper": upper, "threshold_lower": lower,
+                                 "criterion": "exceeds_upper"})
             elif v < lower:
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(v),
-                                  "threshold_upper": upper, "threshold_lower": lower,
-                                  "criterion": "exceeds_lower"})
+                                 "threshold_upper": upper, "threshold_lower": lower,
+                                 "criterion": "exceeds_lower"})
 
     elif method == "iqr":
         q1, q3 = np.percentile(x, [25, 75], method="linear")
@@ -40,12 +40,12 @@ def detect_outliers(values: List[float], timestamps: List[str], method: str) -> 
         for i, v in enumerate(x.tolist()):
             if v > upper:
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(v),
-                                  "threshold_upper": upper, "threshold_lower": lower,
-                                  "criterion": "exceeds_upper"})
+                                 "threshold_upper": upper, "threshold_lower": lower,
+                                 "criterion": "exceeds_upper"})
             elif v < lower:
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(v),
-                                  "threshold_upper": upper, "threshold_lower": lower,
-                                  "criterion": "exceeds_lower"})
+                                 "threshold_upper": upper, "threshold_lower": lower,
+                                 "criterion": "exceeds_lower"})
 
     elif method == "chauvenet":
         if std != 0.0:
@@ -54,8 +54,8 @@ def detect_outliers(values: List[float], timestamps: List[str], method: str) -> 
             mask = (n * probability) < 0.5
             for i in np.where(mask)[0].astype(int).tolist():
                 outliers.append({"index": i, "timestamp": timestamps[i], "value": float(x[i]),
-                                  "criterion": "chauvenet", "z_score": float(z[i]),
-                                  "probability": float(probability[i])})
+                                 "criterion": "chauvenet", "z_score": float(z[i]),
+                                 "probability": float(probability[i])})
     else:
         raise ValueError(f"Método desconocido: {method}")
 

@@ -99,7 +99,7 @@ def create_app() -> FastAPI:
     def post_outliers(body: OutliersRequest):
         if len(body.values) != len(body.timestamps):
             return JSONResponse({"error": "validation_error",
-                                  "message": "values and timestamps must have the same length"}, 400)
+                                 "message": "values and timestamps must have the same length"}, 400)
         data = body.model_dump()
         key = cache.make_key(data)
         if hit := cache.get(key):
@@ -117,7 +117,7 @@ def create_app() -> FastAPI:
     def post_denoise(body: DenoiseRequest):
         if len(body.values) != len(body.timestamps):
             return JSONResponse({"error": "validation_error",
-                                  "message": "values and timestamps must have the same length"}, 400)
+                                 "message": "values and timestamps must have the same length"}, 400)
         data = body.model_dump()
         key = cache.make_key(data)
         if hit := cache.get(key):
@@ -137,10 +137,10 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "validation_error", "message": "values must have at least 4 elements"}, 400)
         if len(body.values) != len(body.timestamps):
             return JSONResponse({"error": "validation_error",
-                                  "message": "values and timestamps must have the same length"}, 400)
+                                 "message": "values and timestamps must have the same length"}, 400)
         if body.model == "polynomial" and not (1 <= body.degree < len(body.values)):
             return JSONResponse({"error": "validation_error",
-                                  "message": f"degree must be >= 1 and < {len(body.values)}"}, 400)
+                                 "message": f"degree must be >= 1 and < {len(body.values)}"}, 400)
 
         data = body.model_dump()
         key = cache.make_key(data)
@@ -167,12 +167,12 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "validation_error", "message": "values must have at least 4 elements"}, 400)
         if len(body.values) != len(body.timestamps):
             return JSONResponse({"error": "validation_error",
-                                  "message": "values and timestamps must have the same length"}, 400)
+                                 "message": "values and timestamps must have the same length"}, 400)
         if not (1 <= body.horizon <= 365):
             return JSONResponse({"error": "validation_error", "message": "horizon must be between 1 and 365"}, 400)
         if body.arima_order is not None and (len(body.arima_order) != 3 or any(v < 0 for v in body.arima_order)):
             return JSONResponse({"error": "validation_error",
-                                  "message": "arima_order must be a list of 3 non-negative integers"}, 400)
+                                 "message": "arima_order must be a list of 3 non-negative integers"}, 400)
 
         order = tuple(body.arima_order) if body.arima_order else (1, 1, 1)
         data = body.model_dump()
