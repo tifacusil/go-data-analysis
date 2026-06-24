@@ -1,4 +1,9 @@
+import logging
+import threading
+
 import requests
+
+logger = logging.getLogger("consul")
 
 
 def _headers() -> dict:
@@ -38,8 +43,31 @@ def register() -> None:
             headers=_headers(),
             timeout=3,
         ).raise_for_status()
-    except Exception:
-        return
+        logger.info("consul register ok id=%s", Config.INSTANCE_ID)
+    except Exception as exc:
+        # No swallow silencioso: el registro fallaba sin dejar rastro (CLAUDE.md 1.8, 5).
+        logger.warning("consul register fallo: %s", exc)
+        raise
+
+
+_HEARTBEAT_INTERVAL = 10.0  # s; re-registra periodicamente como el Registrar de Go (CLAUDE.md 4)
+
+
+def start_heartbeat(stop: threading.Event) -> threading.Thread:
+    """Re-registra en loop hasta que stop se active. Garantiza recuperacion si
+    Consul no estaba listo al boot (race de arranque) — mismo patron que el
+    Registrar.Run de los servicios Go. Bloquea: corre en thread daemon."""
+    def _loop() -> None:
+        while not stop.is_set():
+            try:
+                register()
+            except Exception:
+                pass  # ya logueado en register()
+            stop.wait(_HEARTBEAT_INTERVAL)
+
+    t = threading.Thread(target=_loop, name="consul-heartbeat", daemon=True)
+    t.start()
+    return t
 
 
 def deregister() -> None:

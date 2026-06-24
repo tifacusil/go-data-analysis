@@ -3,6 +3,7 @@ FastAPI HTTP app — for frontend calls only (proxied through Nginx / Vercel).
 Server-to-server consumers (e.g. early-warning-service) must use the gRPC interface.
 """
 import logging
+import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -28,8 +29,12 @@ _ALLOWED_ORIGINS = [
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    consul.register()
+    # Heartbeat en lugar de register one-shot: si Consul no esta listo al boot,
+    # reintenta cada 10s hasta lograrlo (CLAUDE.md 4 — Health checks activos).
+    stop = threading.Event()
+    consul.start_heartbeat(stop)
     yield
+    stop.set()
     consul.deregister()
 
 
