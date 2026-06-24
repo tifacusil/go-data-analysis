@@ -27,6 +27,11 @@ def register() -> None:
         payload = {
             "ID": Config.INSTANCE_ID,
             "Name": "data-analysis",
+            # Address = la direccion por la que el resto del sistema alcanza esta
+            # instancia (mismo host que el check). Sin esto Consul devuelve
+            # ServiceAddress vacio y consul-template no puede armar el upstream de
+            # nginx -> 502. Es el hostname del contenedor (via ANALYSIS__HOST).
+            "Address": check_host,
             "Port": Config.HTTP_PORT,
             "Tags": [f"version:{Config.VERSION}", "lang-python", f"env:{Config.ENV}"],
             "Check": {

@@ -3,7 +3,9 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+# bash: gen_proto.sh usa `set -o pipefail` (bashism); python:3.12-slim solo trae
+# dash, donde `bash script.sh` cae a dash y falla con "pipefail: invalid option".
+RUN apt-get update && apt-get install -y --no-install-recommends gcc bash && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt

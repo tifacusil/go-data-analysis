@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel, field_validator
 
 from app import cache, consul
@@ -43,9 +44,23 @@ def create_app() -> FastAPI:
     if prefix and not prefix.startswith("/"):
         prefix = f"/{prefix}"
 
-    app = FastAPI(title="Data Analysis Service", version=Config.VERSION, lifespan=_lifespan)
+    # docs_url=None desactiva la Swagger UI nativa (que pide /openapi.json con
+    # ruta ABSOLUTA y se rompe tras el gateway con prefix /api/v1/analysis/).
+    # Más abajo se monta una UI propia que apunta al spec con URL RELATIVA.
+    app = FastAPI(title="Data Analysis Service", version=Config.VERSION,
+                  lifespan=_lifespan, docs_url=None, redoc_url=None,
+                  openapi_url=f"{prefix}/openapi.json")
     app.add_middleware(CORSMiddleware, allow_origins=_ALLOWED_ORIGINS,
                        allow_methods=["GET", "POST"], allow_headers=["*"])
+
+    # Swagger UI en {prefix}/docs apuntando al spec con URL RELATIVA
+    # ("openapi.json"), así resuelve contra la URL pública actual y funciona tras
+    # el gateway en /api/v1/analysis/docs sin recompilar. Mismo patrón que el
+    # resto del fleet (Go sirve /docs con spec relativo).
+    @app.get(f"{prefix}/docs", include_in_schema=False)
+    def swagger_ui():
+        return get_swagger_ui_html(openapi_url="openapi.json",
+                                   title="data-analysis — API docs")
 
     # ── Schemas ───────────────────────────────────────────────────────────────
 
