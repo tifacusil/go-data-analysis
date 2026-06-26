@@ -29,7 +29,6 @@ scripts/            gen_proto.sh — generates Python stubs from the proto
 app/
   config.py         All configuration via environment variables
   cache.py          Redis cache (shared by HTTP and gRPC)
-  consul.py         Consul registration/deregistration
   grpc_servicer.py  gRPC handler — server-to-server transport
   http_app.py       FastAPI app — frontend HTTP transport
   generated/        Auto-generated proto stubs (gitignored)
@@ -51,7 +50,7 @@ tests/
 ### Prerequisites
 
 - Python 3.12
-- Running infra stack from `go-tesis-infra/local/infra/` (Redis, Consul)
+- Running infra stack from `go-tesis-infra/local/infra/` (Redis)
 
 ### Setup
 
@@ -94,10 +93,8 @@ All configuration is via environment variables. See `.env.example` for the full 
 | `ANALYSIS__GRPC_PORT` | `50051` | gRPC server port |
 | `ANALYSIS__GRPC_MAX_WORKERS` | `10` | Thread pool size for blocking gRPC handlers |
 | `ANALYSIS__ROUTE_PREFIX` | _(empty)_ | Optional URL prefix (e.g. `/analysis`) |
-| `ANALYSIS__INSTANCE_ID` | `data-analysis-01` | Consul service instance ID |
 | `ANALYSIS__REDIS__HOST` | `localhost` | Redis host |
 | `ANALYSIS__REDIS__CACHE_TTL_SECONDS` | `3600` | Cache TTL in seconds |
-| `ANALYSIS__CONSUL__HOST` | `localhost` | Consul host |
 
 ---
 
@@ -107,7 +104,7 @@ All routes are prefixed by `ANALYSIS__ROUTE_PREFIX` (empty by default).
 
 ### `GET /health`
 
-Returns service status, Redis connectivity, Consul registration, and optional library availability.
+Returns service status, Redis connectivity, and optional library availability.
 
 ### `POST /outliers`
 

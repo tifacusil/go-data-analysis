@@ -13,15 +13,9 @@ class Config:
 
     ENV = os.environ.get("ANALYSIS__ENV", "dev")
     VERSION = os.environ.get("ANALYSIS__VERSION", "1.0.0")
-    INSTANCE_ID = os.environ.get("ANALYSIS__INSTANCE_ID", "data-analysis-01")
 
     # Redis
     REDIS_HOST = os.environ.get("ANALYSIS__REDIS__HOST", "localhost")
     REDIS_PORT = int(os.environ.get("ANALYSIS__REDIS__PORT", 6379))
     REDIS_PASSWORD = os.environ.get("ANALYSIS__REDIS__PASSWORD") or None
     REDIS_CACHE_TTL_SECONDS = int(os.environ.get("ANALYSIS__REDIS__CACHE_TTL_SECONDS", 3600))
-
-    # Consul
-    CONSUL_HOST = os.environ.get("ANALYSIS__CONSUL__HOST", "localhost")
-    CONSUL_PORT = int(os.environ.get("ANALYSIS__CONSUL__PORT", 8500))
-    CONSUL_TOKEN = os.environ.get("ANALYSIS__CONSUL__TOKEN") or None

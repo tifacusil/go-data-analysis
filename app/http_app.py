@@ -3,8 +3,6 @@ FastAPI HTTP app — for frontend calls only (proxied through Nginx / Vercel).
 Server-to-server consumers (e.g. early-warning-service) must use the gRPC interface.
 """
 import logging
-import threading
-from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, Request
@@ -13,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel, field_validator
 
-from app import cache, consul
+from app import cache
 from app.config import Config
 from services import outliers_service, denoise_service, regression_service, predict_service
 
@@ -28,17 +26,6 @@ _ALLOWED_ORIGINS = [
 ]
 
 
-@asynccontextmanager
-async def _lifespan(app: FastAPI):
-    # Heartbeat en lugar de register one-shot: si Consul no esta listo al boot,
-    # reintenta cada 10s hasta lograrlo (CLAUDE.md 4 — Health checks activos).
-    stop = threading.Event()
-    consul.start_heartbeat(stop)
-    yield
-    stop.set()
-    consul.deregister()
-
-
 def create_app() -> FastAPI:
     prefix = (Config.ROUTE_PREFIX or "").strip().rstrip("/")
     if prefix and not prefix.startswith("/"):
@@ -48,7 +35,7 @@ def create_app() -> FastAPI:
     # ruta ABSOLUTA y se rompe tras el gateway con prefix /api/v1/analysis/).
     # Más abajo se monta una UI propia que apunta al spec con URL RELATIVA.
     app = FastAPI(title="Data Analysis Service", version=Config.VERSION,
-                  lifespan=_lifespan, docs_url=None, redoc_url=None,
+                  docs_url=None, redoc_url=None,
                   openapi_url=f"{prefix}/openapi.json")
     app.add_middleware(CORSMiddleware, allow_origins=_ALLOWED_ORIGINS,
                        allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -110,7 +97,6 @@ def create_app() -> FastAPI:
         return {
             "status": overall,
             "redis": "connected" if cache.ping() else "unavailable",
-            "consul": "registered" if consul.is_registered() else "unregistered",
             "version": Config.VERSION,
             "libs": libs,
         }
