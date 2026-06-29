@@ -5,7 +5,6 @@ syntax = "proto3";
 // go-early-warning. Actualizar ambos archivos si cambia el contrato.
 package dataanalysis.v1;
 
-option python_out = "app/generated";
 
 service AnalysisService {
   rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse);
