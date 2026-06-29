@@ -13,7 +13,7 @@ import pymysql
 import pymysql.cursors
 
 from app.config import Config
-from app.generated import dataanalysis__v1__pb2, dataanalysis__v1__pb2_grpc
+from app.generated import dataanalysis_v1_pb2, dataanalysis_v1_pb2_grpc
 from services import regression_service
 
 logger = logging.getLogger("analyze_servicer")
@@ -56,7 +56,7 @@ def _classify_trend(values: list[float], timestamps: list[str]) -> str:
         return "stable"
 
 
-class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
+class AnalyzeServicer(dataanalysis_v1_pb2_grpc.AnalysisServiceServicer):
 
     def Analyze(self, request, context):
         project_id = request.project_id
@@ -66,7 +66,7 @@ class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
         if not project_id or not window_start or not window_end:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("project_id, window_start, window_end required")
-            return dataanalysis__v1__pb2.AnalyzeResponse()
+            return dataanalysis_v1_pb2.AnalyzeResponse()
 
         try:
             conn = _connect()
@@ -74,7 +74,7 @@ class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
             logger.error("analyze_db_connect_failed project=%s err=%s", project_id, exc)
             context.set_code(grpc.StatusCode.UNAVAILABLE)
             context.set_details("database unavailable")
-            return dataanalysis__v1__pb2.AnalyzeResponse()
+            return dataanalysis_v1_pb2.AnalyzeResponse()
 
         try:
             with conn.cursor() as cur:
@@ -101,7 +101,7 @@ class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
                             "analyze_ok project=%s table=%s rows=%d trend=%s",
                             project_id, table, len(rows), trend,
                         )
-                        return dataanalysis__v1__pb2.AnalyzeResponse(
+                        return dataanalysis_v1_pb2.AnalyzeResponse(
                             trend=trend,
                             model_version=VERSION,
                             fields={
@@ -114,7 +114,7 @@ class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
 
             # All tables empty for this project/window
             logger.info("analyze_no_data project=%s window=%s/%s", project_id, window_start, window_end)
-            return dataanalysis__v1__pb2.AnalyzeResponse(
+            return dataanalysis_v1_pb2.AnalyzeResponse(
                 trend="no_data",
                 model_version=VERSION,
                 fields={"reason": "no_readings_in_window"},
@@ -124,6 +124,6 @@ class AnalyzeServicer(dataanalysis__v1__pb2_grpc.AnalysisServiceServicer):
             logger.error("analyze_query_failed project=%s err=%s", project_id, exc)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"query error: {exc}")
-            return dataanalysis__v1__pb2.AnalyzeResponse()
+            return dataanalysis_v1_pb2.AnalyzeResponse()
         finally:
             conn.close()
