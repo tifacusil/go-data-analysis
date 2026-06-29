@@ -25,7 +25,7 @@ touch "$OUT_DIR/__init__.py"
 # Fix relative imports emitted by protoc
 sed -i 's/^import analysis_pb2/from app.generated import analysis_pb2/' \
   "$OUT_DIR/analysis_pb2_grpc.py"
-sed -i 's/^import dataanalysis__v1__pb2/from app.generated import dataanalysis__v1__pb2/' \
-  "$OUT_DIR/dataanalysis__v1__pb2_grpc.py"
+sed -i 's/^import dataanalysis_v1_pb2/from app.generated import dataanalysis_v1_pb2/' \
+  "$OUT_DIR/dataanalysis_v1_pb2_grpc.py"
 
 echo "Proto generated → $OUT_DIR"
