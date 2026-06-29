@@ -6,7 +6,7 @@ the most representative sensor type available for the window. Empty dataset
 returns trend="no_data" — never raises an exception that would trip the breaker.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 import grpc
 import pymysql
