@@ -16,6 +16,7 @@ EMD-signal==1.6.4
 # Infrastructure
 redis==6.1.0
 requests==2.32.4
+PyMySQL==1.1.1
 
 # Validation
 pydantic==2.11.7

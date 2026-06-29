@@ -7,7 +7,8 @@ import uvicorn
 
 from app.config import Config
 from app.grpc_servicer import AnalysisServicer
-from app.generated import analysis_pb2_grpc
+from app.analyze_servicer import AnalyzeServicer
+from app.generated import analysis_pb2_grpc, dataanalysis__v1__pb2_grpc
 from app.http_app import create_app
 
 logging.basicConfig(
@@ -26,6 +27,7 @@ async def _serve_grpc() -> None:
         ],
     )
     analysis_pb2_grpc.add_AnalysisServiceServicer_to_server(AnalysisServicer(), server)
+    dataanalysis__v1__pb2_grpc.add_AnalysisServiceServicer_to_server(AnalyzeServicer(), server)
     listen_addr = f"[::]:{Config.GRPC_PORT}"
     server.add_insecure_port(listen_addr)
     await server.start()
