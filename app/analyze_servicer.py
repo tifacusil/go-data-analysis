@@ -5,6 +5,7 @@ Called by early-warning (circuit-breaker wrapped). Returns trend derived from
 the most representative sensor type available for the window. Empty dataset
 returns trend="no_data" — never raises an exception that would trip the breaker.
 """
+import asyncio
 import logging
 from datetime import datetime
 
@@ -56,9 +57,76 @@ def _classify_trend(values: list[float], timestamps: list[str]) -> str:
         return "stable"
 
 
+def _analyze_blocking(project_id: str, window_start: str, window_end: str):
+    """
+    Blocking DB query + regression. Runs in a worker thread (see Analyze) so it
+    never stalls the shared asyncio event loop.
+
+    Returns (grpc_status_code | None, details | None, AnalyzeResponse). A None
+    status code means success; the caller only sets code/details when non-None.
+    """
+    try:
+        conn = _connect()
+    except Exception as exc:
+        logger.error("analyze_db_connect_failed project=%s err=%s", project_id, exc)
+        return (grpc.StatusCode.UNAVAILABLE, "database unavailable",
+                dataanalysis_v1_pb2.AnalyzeResponse())
+
+    try:
+        with conn.cursor() as cur:
+            for table, value_col in _SENSOR_TABLES:
+                cur.execute(
+                    f"SELECT `timestamp`, `{value_col}` AS val "
+                    f"FROM `{table}` "
+                    f"WHERE project_id = %s AND `timestamp` BETWEEN %s AND %s "
+                    f"AND `{value_col}` IS NOT NULL "
+                    f"ORDER BY `timestamp` LIMIT 500",
+                    (project_id, window_start, window_end),
+                )
+                rows = cur.fetchall()
+                if rows:
+                    values = [float(r["val"]) for r in rows]
+                    timestamps = [
+                        r["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                        if isinstance(r["timestamp"], datetime)
+                        else str(r["timestamp"])
+                        for r in rows
+                    ]
+                    trend = _classify_trend(values, timestamps)
+                    logger.info(
+                        "analyze_ok project=%s table=%s rows=%d trend=%s",
+                        project_id, table, len(rows), trend,
+                    )
+                    return (None, None, dataanalysis_v1_pb2.AnalyzeResponse(
+                        trend=trend,
+                        model_version=VERSION,
+                        fields={
+                            "sensor_table": table,
+                            "row_count": str(len(rows)),
+                            "window_start": window_start,
+                            "window_end": window_end,
+                        },
+                    ))
+
+        # All tables empty for this project/window
+        logger.info("analyze_no_data project=%s window=%s/%s", project_id, window_start, window_end)
+        return (None, None, dataanalysis_v1_pb2.AnalyzeResponse(
+            trend="no_data",
+            model_version=VERSION,
+            fields={"reason": "no_readings_in_window"},
+        ))
+
+    except Exception as exc:
+        logger.error("analyze_query_failed project=%s err=%s", project_id, exc)
+        return (grpc.StatusCode.INTERNAL, f"query error: {exc}",
+                dataanalysis_v1_pb2.AnalyzeResponse())
+    finally:
+        conn.close()
+
+
 class AnalyzeServicer(dataanalysis_v1_pb2_grpc.AnalysisServiceServicer):
 
-    def Analyze(self, request, context):
+    async def Analyze(self, request, context):
         project_id = request.project_id
         window_start = request.window_start
         window_end = request.window_end
@@ -68,62 +136,12 @@ class AnalyzeServicer(dataanalysis_v1_pb2_grpc.AnalysisServiceServicer):
             context.set_details("project_id, window_start, window_end required")
             return dataanalysis_v1_pb2.AnalyzeResponse()
 
-        try:
-            conn = _connect()
-        except Exception as exc:
-            logger.error("analyze_db_connect_failed project=%s err=%s", project_id, exc)
-            context.set_code(grpc.StatusCode.UNAVAILABLE)
-            context.set_details("database unavailable")
-            return dataanalysis_v1_pb2.AnalyzeResponse()
-
-        try:
-            with conn.cursor() as cur:
-                for table, value_col in _SENSOR_TABLES:
-                    cur.execute(
-                        f"SELECT `timestamp`, `{value_col}` AS val "
-                        f"FROM `{table}` "
-                        f"WHERE project_id = %s AND `timestamp` BETWEEN %s AND %s "
-                        f"AND `{value_col}` IS NOT NULL "
-                        f"ORDER BY `timestamp` LIMIT 500",
-                        (project_id, window_start, window_end),
-                    )
-                    rows = cur.fetchall()
-                    if rows:
-                        values = [float(r["val"]) for r in rows]
-                        timestamps = [
-                            r["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
-                            if isinstance(r["timestamp"], datetime)
-                            else str(r["timestamp"])
-                            for r in rows
-                        ]
-                        trend = _classify_trend(values, timestamps)
-                        logger.info(
-                            "analyze_ok project=%s table=%s rows=%d trend=%s",
-                            project_id, table, len(rows), trend,
-                        )
-                        return dataanalysis_v1_pb2.AnalyzeResponse(
-                            trend=trend,
-                            model_version=VERSION,
-                            fields={
-                                "sensor_table": table,
-                                "row_count": str(len(rows)),
-                                "window_start": window_start,
-                                "window_end": window_end,
-                            },
-                        )
-
-            # All tables empty for this project/window
-            logger.info("analyze_no_data project=%s window=%s/%s", project_id, window_start, window_end)
-            return dataanalysis_v1_pb2.AnalyzeResponse(
-                trend="no_data",
-                model_version=VERSION,
-                fields={"reason": "no_readings_in_window"},
-            )
-
-        except Exception as exc:
-            logger.error("analyze_query_failed project=%s err=%s", project_id, exc)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"query error: {exc}")
-            return dataanalysis_v1_pb2.AnalyzeResponse()
-        finally:
-            conn.close()
+        # Offload blocking DB + regression to a worker thread; keeps the shared
+        # event loop (grpc.aio + uvicorn) free to serve other requests.
+        code, details, response = await asyncio.to_thread(
+            _analyze_blocking, project_id, window_start, window_end
+        )
+        if code is not None:
+            context.set_code(code)
+            context.set_details(details)
+        return response

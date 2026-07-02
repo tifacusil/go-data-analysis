@@ -10,6 +10,7 @@ from app.grpc_servicer import AnalysisServicer
 from app.analyze_servicer import AnalyzeServicer
 from app.generated import analysis_pb2_grpc, dataanalysis_v1_pb2_grpc
 from app.http_app import create_app
+from app.metrics import GrpcMetricsInterceptor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +22,7 @@ logger = logging.getLogger("main")
 async def _serve_grpc() -> None:
     server = grpc.aio.server(
         migration_thread_pool=futures.ThreadPoolExecutor(max_workers=Config.GRPC_MAX_WORKERS),
+        interceptors=[GrpcMetricsInterceptor()],
         options=[
             ("grpc.max_receive_message_length", 16 * 1024 * 1024),  # 16 MB
             ("grpc.max_send_message_length", 16 * 1024 * 1024),
