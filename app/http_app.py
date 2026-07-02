@@ -7,12 +7,14 @@ from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.openapi.docs import get_swagger_ui_html
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, field_validator
 
 from app import cache
 from app.config import Config
+from app.metrics import METRICS_PATH, prometheus_middleware
 from services import outliers_service, denoise_service, regression_service, predict_service
 
 logger = logging.getLogger("http_app")
@@ -39,6 +41,16 @@ def create_app() -> FastAPI:
                   openapi_url=f"{prefix}/openapi.json")
     app.add_middleware(CORSMiddleware, allow_origins=_ALLOWED_ORIGINS,
                        allow_methods=["GET", "POST"], allow_headers=["*"])
+
+    # HTTP-level Prometheus instrumentation (request count + latency).
+    app.middleware("http")(prometheus_middleware)
+
+    # /metrics served at ROOT (no ROUTE_PREFIX): Prometheus kubernetes_sd
+    # scrapes the pod port directly, not through the gateway. Same convention
+    # as the Go fleet.
+    @app.get(METRICS_PATH, include_in_schema=False)
+    def metrics():
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     # Swagger UI en {prefix}/docs apuntando al spec con URL RELATIVA
     # ("openapi.json"), así resuelve contra la URL pública actual y funciona tras
