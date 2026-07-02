@@ -4,6 +4,8 @@ __pycache__/
 .env.*
 !.env.example
 app/generated/analysis_pb2*.py
+app/generated/dataanalysis_v1_pb2*.py
+app/generated/readings_pb2*.py
 dist/
 *.egg-info/
 .pytest_cache/

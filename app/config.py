@@ -20,10 +20,14 @@ class Config:
     REDIS_PASSWORD = os.environ.get("ANALYSIS__REDIS__PASSWORD") or None
     REDIS_CACHE_TTL_SECONDS = int(os.environ.get("ANALYSIS__REDIS__CACHE_TTL_SECONDS", 3600))
 
-    # MySQL data-management (read-only access for Analyze RPC).
-    # Accepts both ANALYSIS__MYSQL__* (new) and MYSQL_* (legacy configmap) keys.
-    MYSQL_HOST = os.environ.get("ANALYSIS__MYSQL__HOST") or os.environ.get("MYSQL_HOST", "localhost")
-    MYSQL_PORT = int(os.environ.get("ANALYSIS__MYSQL__PORT") or os.environ.get("MYSQL_PORT", 3306))
-    MYSQL_USER = os.environ.get("ANALYSIS__MYSQL__USER") or os.environ.get("MYSQL_USER", "svc_data_analysis_ro")
-    MYSQL_PASSWORD = os.environ.get("ANALYSIS__MYSQL__PASSWORD") or os.environ.get("MYSQL_PASSWORD", "")
-    MYSQL_DB = os.environ.get("ANALYSIS__MYSQL__DB") or os.environ.get("MYSQL_DATABASE", "data_management")
+    # data-management ReadingService (gRPC). Reemplaza el acceso directo pymysql
+    # a las tablas de data-management (viola database-per-service). Se resuelve
+    # por DNS de k8s (data-management:9090); sin Consul.
+    DATA_MANAGEMENT_GRPC_ADDR = os.environ.get("DATA_MANAGEMENT_GRPC_ADDR", "data-management:9090")
+    # Resiliencia de la llamada saliente sincrona (CLAUDE.md §5).
+    DM_CALL_TIMEOUT_SECONDS = float(os.environ.get("DATA_MANAGEMENT_CALL_TIMEOUT_SECONDS", 5.0))
+    DM_RETRY_BACKOFF_SECONDS = [
+        float(s) for s in os.environ.get("DATA_MANAGEMENT_RETRY_BACKOFF_SECONDS", "1,5,30").split(",") if s
+    ]
+    DM_BREAKER_FAIL_THRESHOLD = int(os.environ.get("DATA_MANAGEMENT_BREAKER_FAIL_THRESHOLD", 3))
+    DM_BREAKER_RESET_SECONDS = float(os.environ.get("DATA_MANAGEMENT_BREAKER_RESET_SECONDS", 30.0))

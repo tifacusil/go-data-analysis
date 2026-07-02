@@ -4,16 +4,17 @@ AnalyzeServicer — implements dataanalysis.v1.AnalysisService.Analyze.
 Called by early-warning (circuit-breaker wrapped). Returns trend derived from
 the most representative sensor type available for the window. Empty dataset
 returns trend="no_data" — never raises an exception that would trip the breaker.
+
+Series come from data-management's ReadingService via gRPC (see reading_client);
+data-analysis no longer touches the data-management tables directly, so it is no
+longer coupled to that service's physical schema (CLAUDE.md §1.2 / §5).
 """
 import asyncio
 import logging
-from datetime import datetime
 
 import grpc
-import pymysql
-import pymysql.cursors
 
-from app.config import Config
+from app import reading_client
 from app.generated import dataanalysis_v1_pb2, dataanalysis_v1_pb2_grpc
 from services import regression_service
 
@@ -21,28 +22,16 @@ logger = logging.getLogger("analyze_servicer")
 
 VERSION = "1.0.0"
 
-# Sensor tables queried in priority order; first non-empty table wins.
-_SENSOR_TABLES = [
-    ("gnss_readings", "cumulative_displacement_mm"),
-    ("deep_displacement_readings", "cumulative_tilt_mm"),
-    ("rainfall_readings", "cumulative_rainfall_mm"),
-    ("strain_readings", "strain_microstrain"),
-    ("soil_pressure_readings", "pressure_kpa"),
+# Sensor types queried in priority order; first non-empty series wins. The value
+# is already the canonical column for the type (data-management resolves it), so
+# data-analysis knows no table/column names.
+_SENSOR_TYPES = [
+    "gnss",
+    "deep_displacement",
+    "rainfall",
+    "strain",
+    "soil_pressure",
 ]
-
-
-def _connect() -> pymysql.Connection:
-    return pymysql.connect(
-        host=Config.MYSQL_HOST,
-        port=Config.MYSQL_PORT,
-        user=Config.MYSQL_USER,
-        password=Config.MYSQL_PASSWORD,
-        database=Config.MYSQL_DB,
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        connect_timeout=3,
-        read_timeout=10,
-    )
 
 
 def _classify_trend(values: list[float], timestamps: list[str]) -> str:
@@ -59,56 +48,36 @@ def _classify_trend(values: list[float], timestamps: list[str]) -> str:
 
 def _analyze_blocking(project_id: str, window_start: str, window_end: str):
     """
-    Blocking DB query + regression. Runs in a worker thread (see Analyze) so it
-    never stalls the shared asyncio event loop.
+    Blocking outbound RPC(s) + regression. Runs in a worker thread (see Analyze)
+    so the synchronous gRPC call and its retry backoff never stall the shared
+    asyncio event loop.
 
     Returns (grpc_status_code | None, details | None, AnalyzeResponse). A None
     status code means success; the caller only sets code/details when non-None.
     """
     try:
-        conn = _connect()
-    except Exception as exc:
-        logger.error("analyze_db_connect_failed project=%s err=%s", project_id, exc)
-        return (grpc.StatusCode.UNAVAILABLE, "database unavailable",
-                dataanalysis_v1_pb2.AnalyzeResponse())
-
-    try:
-        with conn.cursor() as cur:
-            for table, value_col in _SENSOR_TABLES:
-                cur.execute(
-                    f"SELECT `timestamp`, `{value_col}` AS val "
-                    f"FROM `{table}` "
-                    f"WHERE project_id = %s AND `timestamp` BETWEEN %s AND %s "
-                    f"AND `{value_col}` IS NOT NULL "
-                    f"ORDER BY `timestamp` LIMIT 500",
-                    (project_id, window_start, window_end),
+        for sensor_type in _SENSOR_TYPES:
+            points = reading_client.get_series(project_id, sensor_type, window_start, window_end)
+            if points:
+                values = [float(p.value) for p in points]
+                timestamps = [p.timestamp for p in points]
+                trend = _classify_trend(values, timestamps)
+                logger.info(
+                    "analyze_ok project=%s sensor_type=%s points=%d trend=%s",
+                    project_id, sensor_type, len(points), trend,
                 )
-                rows = cur.fetchall()
-                if rows:
-                    values = [float(r["val"]) for r in rows]
-                    timestamps = [
-                        r["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
-                        if isinstance(r["timestamp"], datetime)
-                        else str(r["timestamp"])
-                        for r in rows
-                    ]
-                    trend = _classify_trend(values, timestamps)
-                    logger.info(
-                        "analyze_ok project=%s table=%s rows=%d trend=%s",
-                        project_id, table, len(rows), trend,
-                    )
-                    return (None, None, dataanalysis_v1_pb2.AnalyzeResponse(
-                        trend=trend,
-                        model_version=VERSION,
-                        fields={
-                            "sensor_table": table,
-                            "row_count": str(len(rows)),
-                            "window_start": window_start,
-                            "window_end": window_end,
-                        },
-                    ))
+                return (None, None, dataanalysis_v1_pb2.AnalyzeResponse(
+                    trend=trend,
+                    model_version=VERSION,
+                    fields={
+                        "sensor_type": sensor_type,
+                        "point_count": str(len(points)),
+                        "window_start": window_start,
+                        "window_end": window_end,
+                    },
+                ))
 
-        # All tables empty for this project/window
+        # Every sensor type returned an empty series for this project/window.
         logger.info("analyze_no_data project=%s window=%s/%s", project_id, window_start, window_end)
         return (None, None, dataanalysis_v1_pb2.AnalyzeResponse(
             trend="no_data",
@@ -116,12 +85,17 @@ def _analyze_blocking(project_id: str, window_start: str, window_end: str):
             fields={"reason": "no_readings_in_window"},
         ))
 
-    except Exception as exc:
-        logger.error("analyze_query_failed project=%s err=%s", project_id, exc)
-        return (grpc.StatusCode.INTERNAL, f"query error: {exc}",
+    except reading_client.ReadingInvalidArgument as exc:
+        logger.error("analyze_invalid_argument project=%s err=%s", project_id, exc)
+        return (grpc.StatusCode.INVALID_ARGUMENT, str(exc),
                 dataanalysis_v1_pb2.AnalyzeResponse())
-    finally:
-        conn.close()
+    except reading_client.ReadingUnavailable as exc:
+        # data-management is down or the breaker is open — degrade by failing
+        # fast with UNAVAILABLE (early-warning's own breaker handles it) rather
+        # than hammering a service that is not responding.
+        logger.error("analyze_upstream_unavailable project=%s err=%s", project_id, exc)
+        return (grpc.StatusCode.UNAVAILABLE, f"data-management unavailable: {exc}",
+                dataanalysis_v1_pb2.AnalyzeResponse())
 
 
 class AnalyzeServicer(dataanalysis_v1_pb2_grpc.AnalysisServiceServicer):
@@ -136,8 +110,8 @@ class AnalyzeServicer(dataanalysis_v1_pb2_grpc.AnalysisServiceServicer):
             context.set_details("project_id, window_start, window_end required")
             return dataanalysis_v1_pb2.AnalyzeResponse()
 
-        # Offload blocking DB + regression to a worker thread; keeps the shared
-        # event loop (grpc.aio + uvicorn) free to serve other requests.
+        # Offload the blocking outbound RPC + regression to a worker thread; keeps
+        # the shared event loop (grpc.aio + uvicorn) free to serve other requests.
         code, details, response = await asyncio.to_thread(
             _analyze_blocking, project_id, window_start, window_end
         )
