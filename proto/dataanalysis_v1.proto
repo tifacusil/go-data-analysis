@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+// data-analysis: enriquecimiento de reportes consumido por early-warning.
+// Misma interfaz que contracts/proto/dataanalysis/v1/dataanalysis.proto en
+// go-early-warning. Actualizar ambos archivos si cambia el contrato.
+package dataanalysis.v1;
+
+
+service AnalysisService {
+  rpc Analyze(AnalyzeRequest) returns (AnalyzeResponse);
+}
+
+message AnalyzeRequest {
+  string project_id   = 1;
+  string period       = 2; // "daily" | "weekly"
+  string window_start = 3; // ISO-8601 UTC
+  string window_end   = 4; // ISO-8601 UTC
+}
+
+// AnalyzeResponse: enriquecimiento insertado en report.data_analysis.
+// fields es mapa abierto para no acoplar esquema interno.
+message AnalyzeResponse {
+  string              trend         = 1; // "stable" | "accelerating" | "decelerating" | "no_data"
+  string              model_version = 2;
+  map<string, string> fields        = 3;
+}
