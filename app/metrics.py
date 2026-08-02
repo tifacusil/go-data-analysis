@@ -20,10 +20,18 @@ REQUEST_COUNT = Counter(
     "Total HTTP requests processed.",
     ["method", "path", "status"],
 )
+# Buckets explicitos: sin esto prometheus_client usa su default
+# (.005 .01 .025 .05 .075 .1 .25 .5 .75 1 2.5 5 7.5 10), que no coincide con los
+# cortes del resto de servicios de Sistema B ni con el SLO de Micrometer en
+# Sistema A. histogram_quantile interpola dentro de cada bucket, asi que una
+# serie con cortes distintos distorsiona el percentil agregado del dashboard.
+_HTTP_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5)
+
 REQUEST_LATENCY = Histogram(
     "http_request_duration_seconds",
     "HTTP request latency in seconds.",
     ["method", "path"],
+    buckets=_HTTP_BUCKETS,
 )
 
 # Path Prometheus scrapes on the pod; excluded from its own metrics.
